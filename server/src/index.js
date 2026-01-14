@@ -127,9 +127,42 @@ io.on('connection', (socket) => {
     });
 
     socket.join(ROOMS.game(gameId));
-    // Emit initial times so client updates immediately
     socket.emit(EVENTS.GAME_CREATED, { gameId, whiteTime: timeMs, blackTime: timeMs });
   });
+
+  // --- Active Timeout Logic ---
+  const gameTimeouts = new Map();
+
+  function clearGameTimeout(gameId) {
+    if (gameTimeouts.has(gameId)) {
+      clearTimeout(gameTimeouts.get(gameId));
+      gameTimeouts.delete(gameId);
+    }
+  }
+
+  function setGameTimeout(gameId, duration, color) {
+    clearGameTimeout(gameId);
+    if (duration <= 0) return handleTimeout(gameId, color);
+
+    // Add buffer (e.g. 500ms) to allow latency before strict server kill
+    const timeoutId = setTimeout(() => {
+      handleTimeout(gameId, color);
+    }, duration + 1000);
+    gameTimeouts.set(gameId, timeoutId);
+  }
+
+  function handleTimeout(gameId, loserColor) {
+    const game = games.get(gameId);
+    if (!game) return;
+
+    const winner = loserColor === 'white' ? 'black' : 'white';
+    const status = { winner, reason: 'Timeout' };
+    io.to(ROOMS.game(gameId)).emit(EVENTS.GAME_OVER, status);
+    saveGame(gameId, game, status);
+    games.delete(gameId);
+    gameTimeouts.delete(gameId); // Cleanup map
+  }
+  // ----------------------------
 
   socket.on(EVENTS.GAME_FIND, () => {
     if (!user) return socket.emit(EVENTS.GAME_ERROR, { message: 'Authentication required.' });
@@ -171,14 +204,22 @@ io.on('connection', (socket) => {
       player1Socket.join(room);
       player2Socket.join(room);
 
-      player1Socket.emit(EVENTS.GAME_JOINED, { gameId, color: players.white.id === player1Socket.id ? 'white' : 'black', board: games.get(gameId).board });
-      player2Socket.emit(EVENTS.GAME_JOINED, { gameId, color: players.white.id === player2Socket.id ? 'white' : 'black', board: games.get(gameId).board });
+      // Send Join with time data (for consistency with manual join)
+      const joinedPayload1 = { gameId, color: players.white.id === player1Socket.id ? 'white' : 'black', board: games.get(gameId).board, whiteTime: games.get(gameId).whiteTime, blackTime: games.get(gameId).blackTime };
+      const joinedPayload2 = { gameId, color: players.white.id === player2Socket.id ? 'white' : 'black', board: games.get(gameId).board, whiteTime: games.get(gameId).whiteTime, blackTime: games.get(gameId).blackTime };
+
+      player1Socket.emit(EVENTS.GAME_JOINED, joinedPayload1);
+      player2Socket.emit(EVENTS.GAME_JOINED, joinedPayload2);
 
       const g = games.get(gameId);
       io.to(room).emit(EVENTS.GAME_STATE, {
         board: g.board, turn: 'white', players: 2, check: null,
         whiteTime: g.whiteTime, blackTime: g.blackTime, lastMoveTime: g.lastMoveTime
       });
+
+      // Start active timer logic
+      g.lastMoveTime = Date.now();
+      setGameTimeout(gameId, g.whiteTime, 'white');
     }
   });
 
@@ -192,10 +233,24 @@ io.on('connection', (socket) => {
     const room = ROOMS.game(gameId);
     game.players.black = { id: socket.id, user };
     socket.join(room);
-    socket.emit(EVENTS.GAME_JOINED, { gameId, color: 'black', board: game.board });
-    io.to(room).emit(EVENTS.GAME_STATE, {
-      board: game.board, turn: game.turn, players: 2, check: game.check
+
+    // Send join confirmation with TIME data
+    socket.emit(EVENTS.GAME_JOINED, {
+      gameId,
+      color: 'black',
+      board: game.board,
+      whiteTime: game.whiteTime,
+      blackTime: game.blackTime
     });
+
+    io.to(room).emit(EVENTS.GAME_STATE, {
+      board: game.board, turn: game.turn, players: 2, check: game.check,
+      whiteTime: game.whiteTime, blackTime: game.blackTime, lastMoveTime: game.lastMoveTime
+    });
+
+    // Start active timer for White
+    game.lastMoveTime = Date.now();
+    setGameTimeout(gameId, game.whiteTime, 'white');
   });
 
   socket.on(EVENTS.GAME_MOVE, ({ gameId, from, to }) => {
@@ -217,8 +272,10 @@ io.on('connection', (socket) => {
           game.blackTime -= elapsed;
         }
       }
+
       // Check for Timeout
       if (game.whiteTime <= 0 || game.blackTime <= 0) {
+        clearGameTimeout(gameId); // Clear active if we caught it here
         const winner = game.whiteTime <= 0 ? 'black' : 'white';
         const status = { winner, reason: 'Timeout' };
         io.to(ROOMS.game(gameId)).emit(EVENTS.GAME_OVER, status);
@@ -227,6 +284,12 @@ io.on('connection', (socket) => {
         return;
       }
       game.lastMoveTime = Date.now();
+
+      // Switch Active Timeout to next player
+      // Turn has already been switched to 'game.turn' (the next player)
+      const nextColor = game.turn === 'white' ? 'black' : 'white'; // Current 'turn' var is still old turn
+      const nextTime = nextColor === 'white' ? game.whiteTime : game.blackTime;
+      setGameTimeout(gameId, nextTime, nextColor);
       // -------------------
 
       const piece = board[from[0]][from[1]];
@@ -261,16 +324,20 @@ io.on('connection', (socket) => {
       matchmakingQueue.splice(queueIndex, 1);
     }
 
-    games.forEach((game, gameId) => {
-      const player = Object.values(game.players).find(p => p && p.id === socket.id);
-      if (player) {
-        const opponentColor = player.user.username === game.players.white.user.username ? 'black' : 'white';
-        const status = { winner: opponentColor, reason: 'Opponent disconnected.' };
+    // If user was in a game, handle disconnect forfeit
+    for (const [gameId, game] of games.entries()) {
+      const pWhite = game.players.white;
+      const pBlack = game.players.black;
+      if ((pWhite && pWhite.id === socket.id) || (pBlack && pBlack.id === socket.id)) {
+        clearGameTimeout(gameId); // STOP TIMER
+        const winner = (pWhite && pWhite.id === socket.id) ? 'black' : 'white';
+        const status = { winner, reason: 'Opponent disconnected.' };
         io.to(ROOMS.game(gameId)).emit(EVENTS.GAME_OVER, status);
         saveGame(gameId, game, status);
         games.delete(gameId);
+        break;
       }
-    });
+    }
   });
 });
 

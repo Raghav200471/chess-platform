@@ -253,7 +253,14 @@ export default function App() {
       if (whiteTime) setWhiteTime(whiteTime);
       if (blackTime) setBlackTime(blackTime);
     };
-    const onGameJoined = ({ gameId, color, board }) => { setIsFindingGame(false); setGameId(gameId); setPlayerColor(color); setBoard(board); };
+    const onGameJoined = ({ gameId, color, board, whiteTime, blackTime }) => {
+      setIsFindingGame(false);
+      setGameId(gameId);
+      setPlayerColor(color);
+      setBoard(board);
+      if (whiteTime) setWhiteTime(whiteTime);
+      if (blackTime) setBlackTime(blackTime);
+    };
     const onGameState = (state) => {
       setBoard(state.board); setTurn(state.turn); setKingInCheck(state.check);
       if (state.whiteTime !== undefined) setWhiteTime(state.whiteTime);
