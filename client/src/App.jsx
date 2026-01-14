@@ -285,7 +285,7 @@ export default function App() {
           if (isCheck) bgColor = '#ff7f7f';
 
           return (
-            <div key={index} onClick={() => handleSquareClick(originalRow, originalCol)} style={{ width: 60, height: 60, backgroundColor: bgColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, cursor: 'pointer', position: 'relative' }}>
+            <div key={index} onClick={() => handleSquareClick(originalRow, originalCol)} style={{ width: 60, height: 60, backgroundColor: bgColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, cursor: 'pointer', position: 'relative', userSelect: 'none' }}>
               <span style={{ textShadow: '0 0 3px rgba(0,0,0,0.5)' }}>{pieceSymbols[piece]}</span>
               {isLegalMove && <div style={{ position: 'absolute', width: 20, height: 20, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '50%' }} />}
             </div>

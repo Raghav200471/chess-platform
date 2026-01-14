@@ -17,6 +17,10 @@ router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
     if (!username || !email || !password) return res.status(400).json({ message: 'username, email and password are required' });
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ message: 'Invalid email format' });
+
     // check existing user/email
     const existing = await User.findOne({ $or: [{ email }, { username }] });
     if (existing) return res.status(400).json({ message: 'User with that email or username already exists' });
