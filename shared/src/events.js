@@ -12,7 +12,8 @@ export const EVENTS = {
   GAME_ERROR: 'game:error',
   ERROR: 'error',
   GAME_FIND: 'game:find',
-  GAME_FINDING: 'game:finding'
+  GAME_FINDING: 'game:finding',
+  GAME_FIND_CANCEL: 'game:find_cancel'
 };
 
 export const ROOMS = {

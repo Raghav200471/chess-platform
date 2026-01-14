@@ -118,6 +118,13 @@ io.on('connection', (socket) => {
   socket.on(EVENTS.GAME_FIND, () => {
     if (!user) return socket.emit(EVENTS.GAME_ERROR, { message: 'Authentication required.' });
 
+    socket.on(EVENTS.GAME_FIND_CANCEL, () => {
+      const index = matchmakingQueue.findIndex(s => s.id === socket.id);
+      if (index !== -1) {
+        matchmakingQueue.splice(index, 1);
+      }
+    });
+
     matchmakingQueue.push(socket);
     socket.emit(EVENTS.GAME_FINDING);
 

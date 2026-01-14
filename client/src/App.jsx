@@ -8,7 +8,8 @@ const EVENTS = {
   GAME_STATE: 'game:state', GAME_MOVE: 'game:move', GAME_OVER: 'game:over',
   GAME_ERROR: 'game:error', ERROR: 'error',
   GAME_FIND: 'game:find',
-  GAME_FINDING: 'game:finding'
+  GAME_FINDING: 'game:finding',
+  GAME_FIND_CANCEL: 'game:find_cancel'
 };
 
 
@@ -78,8 +79,9 @@ const GameHistory = ({ token, currentUser }) => {
           </thead>
           <tbody>
             {history.map((game) => {
-              const myPlayer = game.players.find(p => p.userId === currentUser.id);
-              const opponent = game.players.find(p => p.userId !== currentUser.id);
+              // Relaxed comparison for userId (string vs number/object)
+              const myPlayer = game.players.find(p => String(p.userId) === String(currentUser.id));
+              const opponent = game.players.find(p => String(p.userId) !== String(currentUser.id));
               let result = game.winner === 'draw' ? 'Draw' : (game.winner === myPlayer?.color ? 'Win' : 'Loss');
 
               return (
@@ -307,7 +309,8 @@ export default function App() {
 
   const createButtonDisabled = !connected || !!gameId || isFindingGame;
   const joinButtonDisabled = !connected || !!gameId || !joinGameId || isFindingGame;
-  const findButtonDisabled = !connected || !!gameId || isFindingGame;
+  // FIND button is only disabled if playing (can click to CANCEL if finding)
+  const findButtonDisabled = !connected || !!gameId;
 
   return (
     <div style={{ maxWidth: 640, margin: '2rem auto', fontFamily: 'system-ui', color: '#333' }}>
@@ -326,11 +329,20 @@ export default function App() {
           Create Game
         </button>
         {/* --- ADDED: Find Game Button --- */}
+        {/* --- ADDED: Find Game / Cancel Button --- */}
         <button
-          onClick={() => socket?.emit(E.GAME_FIND)}
+          onClick={() => {
+            if (isFindingGame) {
+              socket?.emit(E.GAME_FIND_CANCEL);
+              setIsFindingGame(false);
+              setStatus('Connect to start');
+            } else {
+              socket?.emit(E.GAME_FIND);
+            }
+          }}
           disabled={findButtonDisabled}
-          style={{ ...styles.button, ...(findButtonDisabled && styles.disabledButton), backgroundColor: '#3b82f6' }}>
-          Find Game
+          style={{ ...styles.button, ...(findButtonDisabled && styles.disabledButton), backgroundColor: isFindingGame ? '#ef4444' : '#3b82f6' }}>
+          {isFindingGame ? 'Cancel Search' : 'Find Game'}
         </button>
         <div style={{ flexGrow: 1, display: 'flex', gap: '8px' }}>
           <input
