@@ -14,7 +14,12 @@ export function connectSocket() {
     socket.disconnect();
   }
 
-  socket = io('http://localhost:4000', {
+  /* 
+   * Replaced hardcoded URL with VITE_SERVER_URL 
+   * fallback to localhost for local development
+   */
+  const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
+  socket = io(SERVER_URL, {
     autoConnect: true,
     transports: ['websocket'],
     auth: { token },
