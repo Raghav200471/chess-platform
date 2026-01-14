@@ -104,7 +104,12 @@ io.on('connection', (socket) => {
     const gameId = crypto.randomUUID().slice(0, 8);
 
     // Parse time control from payload (minutes)
-    const timeMinutes = (payload && payload.timeControl) ? parseInt(payload.timeControl) : 10;
+    // Parse time control from payload (minutes) - Force integer parsing
+    let timeMinutes = 10;
+    if (payload && payload.timeControl) {
+      timeMinutes = parseInt(payload.timeControl, 10);
+      if (isNaN(timeMinutes)) timeMinutes = 10;
+    }
     const timeMs = timeMinutes * 60 * 1000;
 
     games.set(gameId, {

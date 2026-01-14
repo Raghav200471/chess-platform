@@ -223,6 +223,7 @@ export default function App() {
   const [timeControl, setTimeControl] = useState('10'); // Default 10 mins
   const [whiteTime, setWhiteTime] = useState(10 * 60 * 1000);
   const [blackTime, setBlackTime] = useState(10 * 60 * 1000);
+  const [playerCount, setPlayerCount] = useState(0);
 
   const E = useMemo(() => EVENTS, []);
 
@@ -257,6 +258,7 @@ export default function App() {
       setBoard(state.board); setTurn(state.turn); setKingInCheck(state.check);
       if (state.whiteTime !== undefined) setWhiteTime(state.whiteTime);
       if (state.blackTime !== undefined) setBlackTime(state.blackTime);
+      if (state.players) setPlayerCount(state.players);
       setStatus(`It's ${state.turn}'s turn.`);
     };
     const onGameError = ({ message }) => { setIsFindingGame(false); setStatus(`Error: ${message}`); };
@@ -425,7 +427,7 @@ export default function App() {
           {/* Opponent Timer - if I am white, show black top. If I am black, show white top. Default show black top */}
           <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginBottom: 8, alignItems: 'center' }}>
             <span style={{ fontWeight: 'bold' }}>Opponent</span>
-            <Timer time={playerColor === 'black' ? whiteTime : blackTime} isTurn={turn === (playerColor === 'black' ? 'white' : 'black') && !gameOver} />
+            <Timer time={playerColor === 'black' ? whiteTime : blackTime} isTurn={playerCount === 2 && turn === (playerColor === 'black' ? 'white' : 'black') && !gameOver} />
           </div>
 
           <Chessboard />
@@ -433,7 +435,7 @@ export default function App() {
           {/* My Timer */}
           <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginTop: 8, alignItems: 'center' }}>
             <span style={{ fontWeight: 'bold' }}>You</span>
-            <Timer time={playerColor === 'white' ? whiteTime : blackTime} isTurn={turn === (playerColor || 'white') && !gameOver} />
+            <Timer time={playerColor === 'white' ? whiteTime : blackTime} isTurn={playerCount === 2 && turn === (playerColor || 'white') && !gameOver} />
           </div>
         </div>
       )}
