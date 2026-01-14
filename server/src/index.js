@@ -11,7 +11,7 @@ import path from 'path';
 
 import authRoutes from './routes/auth.js';
 import User from './models/User.js';
-import { EVENTS, ROOMS } from '../../shared/src/events.js'; 
+import { EVENTS, ROOMS } from '../../shared/src/events.js';
 import Game from './models/Game.js';
 import gamesRoutes from './routes/games.js';
 import { isKingInCheck, getGameStatus } from './chessUtils.js';
@@ -21,16 +21,16 @@ import createWasmModule from './moveValidator.mjs';
 const wasmModule = await createWasmModule();
 
 // --- after the module is created ---
-const isValidMove_c = wasmModule.cwrap('isValidMove', 'number', ['number','number','number','number','number','number']);
+const isValidMove_c = wasmModule.cwrap('isValidMove', 'number', ['number', 'number', 'number', 'number', 'number', 'number']);
 const calloc_c = wasmModule.cwrap('wasm_malloc', 'number', ['number']);
 const free_c = wasmModule.cwrap('wasm_free', null, ['number']);
 
 function writeBoardToPtr(board) {
   const flat = new Uint8Array(64);
-  for (let r=0; r<8; r++) {
-    for (let c=0; c<8; c++) {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
       const ch = board[r][c] ? board[r][c].charCodeAt(0) : 32; // ' '
-      flat[r*8+c] = ch;
+      flat[r * 8 + c] = ch;
     }
   }
   const ptr = calloc_c(flat.length);
@@ -81,14 +81,14 @@ app.use('/auth', authRoutes);
 app.use('/api/games', gamesRoutes);
 app.get('/health', (_, res) => res.json({ ok: true }));
 
-mongoose.connect('mongodb://127.0.0.1:27017/chess');
+mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/chess');
 
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
     if (token) {
-        const payload = jwt.verify(token, process.env.JWT_SECRET);
-        socket.data.user = await User.findById(payload.id).select('-passwordHash');
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      socket.data.user = await User.findById(payload.id).select('-passwordHash');
     }
     next();
   } catch (err) {
@@ -105,9 +105,9 @@ io.on('connection', (socket) => {
     games.set(gameId, {
       board: JSON.parse(JSON.stringify(initialBoard)),
       turn: 'white',
-      players: { 
+      players: {
         white: { id: socket.id, user },
-        black: null 
+        black: null
       },
       check: null,
     });
@@ -117,18 +117,18 @@ io.on('connection', (socket) => {
 
   socket.on(EVENTS.GAME_FIND, () => {
     if (!user) return socket.emit(EVENTS.GAME_ERROR, { message: 'Authentication required.' });
-    
+
     matchmakingQueue.push(socket);
     socket.emit(EVENTS.GAME_FINDING);
 
     if (matchmakingQueue.length >= 2) {
       const player1Socket = matchmakingQueue.shift();
       const player2Socket = matchmakingQueue.shift();
-      
+
       const gameId = crypto.randomUUID().slice(0, 8);
       const room = ROOMS.game(gameId);
 
-      const players = Math.random() < 0.5 
+      const players = Math.random() < 0.5
         ? { white: { id: player1Socket.id, user: player1Socket.data.user }, black: { id: player2Socket.id, user: player2Socket.data.user } }
         : { white: { id: player2Socket.id, user: player2Socket.data.user }, black: { id: player1Socket.id, user: player1Socket.data.user } };
 
@@ -158,7 +158,7 @@ io.on('connection', (socket) => {
     if (game.players.black) return socket.emit(EVENTS.GAME_ERROR, { message: 'Game is full.' });
     if (game.players.white.id === socket.id) return socket.emit(EVENTS.GAME_ERROR, { message: 'You have already joined.' });
 
-    const room = ROOMS.game(gameId); 
+    const room = ROOMS.game(gameId);
     game.players.black = { id: socket.id, user };
     socket.join(room);
     socket.emit(EVENTS.GAME_JOINED, { gameId, color: 'black', board: game.board });
@@ -170,18 +170,18 @@ io.on('connection', (socket) => {
   socket.on(EVENTS.GAME_MOVE, ({ gameId, from, to }) => {
     const game = games.get(gameId);
     if (!game) return;
-    
+
     const { board, players, turn } = game;
     const playerSocketId = (turn === 'white') ? players.white.id : players.black.id;
     if (socket.id !== playerSocketId) return socket.emit(EVENTS.GAME_ERROR, { message: "It's not your turn." });
-    
+
     if (isValidMoveWasm(board, from, to, turn)) {
       const piece = board[from[0]][from[1]];
       board[to[0]][to[1]] = piece;
       board[from[0]][from[1]] = '';
-      
+
       game.turn = (turn === 'white') ? 'black' : 'white';
-      
+
       const inCheck = isKingInCheck(board, game.turn, isValidMoveWasm);
       game.check = inCheck ? game.turn : null;
 
@@ -208,14 +208,14 @@ io.on('connection', (socket) => {
     }
 
     games.forEach((game, gameId) => {
-        const player = Object.values(game.players).find(p => p && p.id === socket.id);
-        if(player) {
-            const opponentColor = player.user.username === game.players.white.user.username ? 'black' : 'white';
-            const status = { winner: opponentColor, reason: 'Opponent disconnected.' };
-            io.to(ROOMS.game(gameId)).emit(EVENTS.GAME_OVER, status);
-            saveGame(gameId, game, status);
-            games.delete(gameId);
-        }
+      const player = Object.values(game.players).find(p => p && p.id === socket.id);
+      if (player) {
+        const opponentColor = player.user.username === game.players.white.user.username ? 'black' : 'white';
+        const status = { winner: opponentColor, reason: 'Opponent disconnected.' };
+        io.to(ROOMS.game(gameId)).emit(EVENTS.GAME_OVER, status);
+        saveGame(gameId, game, status);
+        games.delete(gameId);
+      }
     });
   });
 });
@@ -223,8 +223,8 @@ io.on('connection', (socket) => {
 async function saveGame(gameId, game, status) {
   try {
     if (!game.players.white?.user || !game.players.black?.user) {
-        console.log(`Game ${gameId} not saved, missing player data.`);
-        return;
+      console.log(`Game ${gameId} not saved, missing player data.`);
+      return;
     }
     const playersForDb = [
       { userId: game.players.white.user._id, username: game.players.white.user.username, color: 'white' },
@@ -244,6 +244,5 @@ async function saveGame(gameId, game, status) {
   }
 }
 
-const PORT = process.env.PORT ?? 4000;
-server.listen(PORT, () => console.log(`Server listening on :${PORT}`));
-
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, '0.0.0.0', () => console.log(`Server listening on :${PORT}`));
