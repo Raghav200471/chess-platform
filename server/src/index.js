@@ -99,9 +99,14 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   const user = socket.data.user;
 
-  socket.on(EVENTS.GAME_CREATE, () => {
+  socket.on(EVENTS.GAME_CREATE, (payload) => {
     if (!user) return socket.emit(EVENTS.GAME_ERROR, { message: 'Authentication required.' });
     const gameId = crypto.randomUUID().slice(0, 8);
+
+    // Parse time control from payload (minutes)
+    const timeMinutes = (payload && payload.timeControl) ? parseInt(payload.timeControl) : 10;
+    const timeMs = timeMinutes * 60 * 1000;
+
     games.set(gameId, {
       board: JSON.parse(JSON.stringify(initialBoard)),
       turn: 'white',
@@ -110,14 +115,15 @@ io.on('connection', (socket) => {
         black: null
       },
       check: null,
-      timeControl: (socket.handshake.query.timeControl || 10) * 60 * 1000, // Read from query or payload? create payload better.
-      // Let's rely on payload in GAME_CREATE handler
+      timeControl: timeMs,
+      whiteTime: timeMs,
+      blackTime: timeMs,
+      lastMoveTime: null
     });
-    // Wait... the previous edit (Step 537) was for GAME_FIND. 
-    // This edit is for GAME_CREATE (custom game)
-    // We need to update the GAME_CREATE handler to accept payload.
+
     socket.join(ROOMS.game(gameId));
-    socket.emit(EVENTS.GAME_CREATED, { gameId });
+    // Emit initial times so client updates immediately
+    socket.emit(EVENTS.GAME_CREATED, { gameId, whiteTime: timeMs, blackTime: timeMs });
   });
 
   socket.on(EVENTS.GAME_FIND, () => {
@@ -163,8 +169,10 @@ io.on('connection', (socket) => {
       player1Socket.emit(EVENTS.GAME_JOINED, { gameId, color: players.white.id === player1Socket.id ? 'white' : 'black', board: games.get(gameId).board });
       player2Socket.emit(EVENTS.GAME_JOINED, { gameId, color: players.white.id === player2Socket.id ? 'white' : 'black', board: games.get(gameId).board });
 
+      const g = games.get(gameId);
       io.to(room).emit(EVENTS.GAME_STATE, {
-        board: games.get(gameId).board, turn: 'white', players: 2, check: null
+        board: g.board, turn: 'white', players: 2, check: null,
+        whiteTime: g.whiteTime, blackTime: g.blackTime, lastMoveTime: g.lastMoveTime
       });
     }
   });

@@ -243,7 +243,15 @@ export default function App() {
 
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
-    const onGameCreated = ({ gameId }) => { setIsFindingGame(false); setGameId(gameId); setPlayerColor('white'); setStatus(`Game ID: ${gameId}. Waiting...`); setBoard(initialBoard()); };
+    const onGameCreated = ({ gameId, whiteTime, blackTime }) => {
+      setIsFindingGame(false);
+      setGameId(gameId);
+      setPlayerColor('white');
+      setStatus(`Game ID: ${gameId}. Waiting...`);
+      setBoard(initialBoard());
+      if (whiteTime) setWhiteTime(whiteTime);
+      if (blackTime) setBlackTime(blackTime);
+    };
     const onGameJoined = ({ gameId, color, board }) => { setIsFindingGame(false); setGameId(gameId); setPlayerColor(color); setBoard(board); };
     const onGameState = (state) => {
       setBoard(state.board); setTurn(state.turn); setKingInCheck(state.check);
@@ -412,21 +420,23 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Opponent Timer - if I am white, show black top. If I am black, show white top. Default show black top */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginBottom: 8, alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold' }}>Opponent</span>
-          <Timer time={playerColor === 'black' ? whiteTime : blackTime} isTurn={turn === (playerColor === 'black' ? 'white' : 'black') && !gameOver} />
-        </div>
+      {gameId && (
+        <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* Opponent Timer - if I am white, show black top. If I am black, show white top. Default show black top */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginBottom: 8, alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold' }}>Opponent</span>
+            <Timer time={playerColor === 'black' ? whiteTime : blackTime} isTurn={turn === (playerColor === 'black' ? 'white' : 'black') && !gameOver} />
+          </div>
 
-        <Chessboard />
+          <Chessboard />
 
-        {/* My Timer */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginTop: 8, alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold' }}>You</span>
-          <Timer time={playerColor === 'white' ? whiteTime : blackTime} isTurn={turn === (playerColor || 'white') && !gameOver} />
+          {/* My Timer */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginTop: 8, alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold' }}>You</span>
+            <Timer time={playerColor === 'white' ? whiteTime : blackTime} isTurn={turn === (playerColor || 'white') && !gameOver} />
+          </div>
         </div>
-      </div>
+      )}
       <GameOverModal />
 
       {/* --- RENDER GAME HISTORY --- */}
