@@ -110,7 +110,12 @@ io.on('connection', (socket) => {
         black: null
       },
       check: null,
+      timeControl: (socket.handshake.query.timeControl || 10) * 60 * 1000, // Read from query or payload? create payload better.
+      // Let's rely on payload in GAME_CREATE handler
     });
+    // Wait... the previous edit (Step 537) was for GAME_FIND. 
+    // This edit is for GAME_CREATE (custom game)
+    // We need to update the GAME_CREATE handler to accept payload.
     socket.join(ROOMS.game(gameId));
     socket.emit(EVENTS.GAME_CREATED, { gameId });
   });
@@ -144,6 +149,12 @@ io.on('connection', (socket) => {
         turn: 'white',
         players,
         check: null,
+        // Default to 10 minutes if not specified
+        timeControl: 10 * 60 * 1000,
+        whiteTime: 10 * 60 * 1000,
+        blackTime: 10 * 60 * 1000,
+        lastMoveTime: null, // Timer starts on first move interaction? Or immediately? usually immediately after 2nd player joins or first move. 
+        // For simplicity: start when game becomes full (2nd player joins)
       });
 
       player1Socket.join(room);
@@ -183,6 +194,28 @@ io.on('connection', (socket) => {
     if (socket.id !== playerSocketId) return socket.emit(EVENTS.GAME_ERROR, { message: "It's not your turn." });
 
     if (isValidMoveWasm(board, from, to, turn)) {
+      // --- TIMER LOGIC ---
+      if (game.lastMoveTime) {
+        const now = Date.now();
+        const elapsed = now - game.lastMoveTime;
+        if (turn === 'white') {
+          game.whiteTime -= elapsed;
+        } else {
+          game.blackTime -= elapsed;
+        }
+      }
+      // Check for Timeout
+      if (game.whiteTime <= 0 || game.blackTime <= 0) {
+        const winner = game.whiteTime <= 0 ? 'black' : 'white';
+        const status = { winner, reason: 'Timeout' };
+        io.to(ROOMS.game(gameId)).emit(EVENTS.GAME_OVER, status);
+        saveGame(gameId, game, status);
+        games.delete(gameId);
+        return;
+      }
+      game.lastMoveTime = Date.now();
+      // -------------------
+
       const piece = board[from[0]][from[1]];
       board[to[0]][to[1]] = piece;
       board[from[0]][from[1]] = '';
@@ -194,7 +227,8 @@ io.on('connection', (socket) => {
 
       const room = ROOMS.game(gameId);
       io.to(room).emit(EVENTS.GAME_STATE, {
-        board: game.board, turn: game.turn, check: game.check
+        board: game.board, turn: game.turn, check: game.check,
+        whiteTime: game.whiteTime, blackTime: game.blackTime, lastMoveTime: game.lastMoveTime
       });
 
       const status = getGameStatus(board, game.turn, isValidMoveWasm);

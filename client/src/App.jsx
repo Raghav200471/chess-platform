@@ -12,6 +12,37 @@ const EVENTS = {
   GAME_FIND_CANCEL: 'game:find_cancel'
 };
 
+// --- Timer Component ---
+const Timer = ({ time, isTurn, onTimeout }) => {
+  const [displayTime, setDisplayTime] = useState(time);
+
+  useEffect(() => { setDisplayTime(time); }, [time]);
+
+  useEffect(() => {
+    let interval = null;
+    if (isTurn && displayTime > 0) {
+      interval = setInterval(() => {
+        setDisplayTime(prev => {
+          if (prev <= 1000) { clearInterval(interval); onTimeout && onTimeout(); return 0; }
+          return prev - 1000;
+        });
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isTurn, time]); // Reset on time update (server sync)
+
+  const formatTime = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return <div style={{ fontFamily: 'monospace', fontSize: '1.2rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: isTurn ? '#dcfce7' : '#eee', border: isTurn ? '1px solid #22c55e' : '1px solid #ccc', color: displayTime < 30000 ? '#ef4444' : 'inherit' }}>{formatTime(displayTime)}</div>;
+};
+
 
 // --- GameHistory Component (Inlined to avoid path issues) ---
 const GameHistory = ({ token, currentUser }) => {
@@ -189,6 +220,9 @@ export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [currentUser, setCurrentUser] = useState(null);
   const [isFindingGame, setIsFindingGame] = useState(false);
+  const [timeControl, setTimeControl] = useState('10'); // Default 10 mins
+  const [whiteTime, setWhiteTime] = useState(10 * 60 * 1000);
+  const [blackTime, setBlackTime] = useState(10 * 60 * 1000);
 
   const E = useMemo(() => EVENTS, []);
 
@@ -211,7 +245,12 @@ export default function App() {
     const onDisconnect = () => setConnected(false);
     const onGameCreated = ({ gameId }) => { setIsFindingGame(false); setGameId(gameId); setPlayerColor('white'); setStatus(`Game ID: ${gameId}. Waiting...`); setBoard(initialBoard()); };
     const onGameJoined = ({ gameId, color, board }) => { setIsFindingGame(false); setGameId(gameId); setPlayerColor(color); setBoard(board); };
-    const onGameState = (state) => { setBoard(state.board); setTurn(state.turn); setKingInCheck(state.check); setStatus(`It's ${state.turn}'s turn.`); };
+    const onGameState = (state) => {
+      setBoard(state.board); setTurn(state.turn); setKingInCheck(state.check);
+      if (state.whiteTime !== undefined) setWhiteTime(state.whiteTime);
+      if (state.blackTime !== undefined) setBlackTime(state.blackTime);
+      setStatus(`It's ${state.turn}'s turn.`);
+    };
     const onGameError = ({ message }) => { setIsFindingGame(false); setStatus(`Error: ${message}`); };
     const onGameOver = (result) => setGameOver(result);
     const onGameFinding = () => { setIsFindingGame(true); setStatus('Searching for an opponent...'); };
@@ -321,9 +360,20 @@ export default function App() {
         {gameId && <p>Game ID: <code style={{ backgroundColor: '#e0e0e0', padding: '2px 6px', borderRadius: '4px' }}>{gameId}</code> | You are: <strong>{playerColor}</strong></p>}
       </div>
 
+      {!gameId && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', alignItems: 'center', justifyContent: 'center' }}>
+          <label>Time Control: </label>
+          <select style={{ padding: '8px', borderRadius: '4px' }} value={timeControl} onChange={(e) => setTimeControl(e.target.value)} disabled={createButtonDisabled}>
+            <option value="1">1 min</option>
+            <option value="5">5 min</option>
+            <option value="10">10 min</option>
+          </select>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '12px', margin: '1rem 0', alignItems: 'center' }}>
         <button
-          onClick={() => socket?.emit(E.GAME_CREATE)}
+          onClick={() => socket?.emit(E.GAME_CREATE, { timeControl })}
           disabled={createButtonDisabled}
           style={{ ...styles.button, ...(createButtonDisabled && styles.disabledButton) }}>
           Create Game
@@ -362,7 +412,21 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}><Chessboard /></div>
+      <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* Opponent Timer - if I am white, show black top. If I am black, show white top. Default show black top */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginBottom: 8, alignItems: 'center' }}>
+          <span style={{ fontWeight: 'bold' }}>Opponent</span>
+          <Timer time={playerColor === 'black' ? whiteTime : blackTime} isTurn={turn === (playerColor === 'black' ? 'white' : 'black') && !gameOver} />
+        </div>
+
+        <Chessboard />
+
+        {/* My Timer */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: 480, marginTop: 8, alignItems: 'center' }}>
+          <span style={{ fontWeight: 'bold' }}>You</span>
+          <Timer time={playerColor === 'white' ? whiteTime : blackTime} isTurn={turn === (playerColor || 'white') && !gameOver} />
+        </div>
+      </div>
       <GameOverModal />
 
       {/* --- RENDER GAME HISTORY --- */}
