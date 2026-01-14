@@ -245,6 +245,10 @@ export default function App() {
       if (isMyPiece) {
         setSelectedSquare([row, col]);
         setLegalMoves(clientChessLogic.getLegalMovesForPiece(board, [row, col]));
+      } else {
+        // If they click an opponent piece or empty square, deselect everything
+        setSelectedSquare(null);
+        setLegalMoves([]);
       }
     }
   };
