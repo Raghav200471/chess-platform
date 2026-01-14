@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { register } from '../services/auth.js';
 import { useNavigate, Link } from 'react-router-dom';
-import { socket } from '../socket';
+import { connectSocket } from '../socket';
 
 export default function Register() {
   const [username, setUsername] = useState('');
@@ -18,8 +18,8 @@ export default function Register() {
       localStorage.setItem('token', token);
 
       // connect socket with token
-      socket.auth = { token };
-      if (!socket.connected) socket.connect();
+      // connect socket with token
+      connectSocket();
 
       navigate('/dashboard');
     } catch (err) {
